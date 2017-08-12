@@ -50,8 +50,12 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :param num_classes: Number of classes to classify
     :return: The Tensor for the last layer of output
     """
-    # TODO: Implement function
-    return None
+    conv_layer7 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, 1) # 1x1 convolution
+    deconv1 = tf.layers.conv2d_transpose(conv_layer7, num_classes, 2, 2)
+    deconv1 = tf.add(deconv1, conv_layer7) # skip layer
+    deconv2 = tf.layers.conv2d_transpose(deconv1, num_classes, 2, 2)
+    deconv_out = tf.layers.conv2d_transpose(deconv2, num_classes, 2, 2)
+    return deconv_out
 tests.test_layers(layers)
 
 
