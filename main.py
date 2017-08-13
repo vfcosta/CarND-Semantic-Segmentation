@@ -50,11 +50,16 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :param num_classes: Number of classes to classify
     :return: The Tensor for the last layer of output
     """
-    conv_layer7 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, 1) # 1x1 convolution
-    deconv1 = tf.layers.conv2d_transpose(conv_layer7, num_classes, 2, 2)
-    deconv1 = tf.add(deconv1, conv_layer7) # skip layer
-    deconv2 = tf.layers.conv2d_transpose(deconv1, num_classes, 2, 2)
-    deconv_out = tf.layers.conv2d_transpose(deconv2, num_classes, 2, 2)
+    conv_layer7 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, 1, trainable=False) # 1x1 convolution
+    deconv1 = tf.layers.conv2d_transpose(conv_layer7, num_classes, 4, 2, padding='same')
+
+    conv_layer4 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, 1, trainable=False) # 1x1 convolution
+    deconv1 = tf.add(deconv1, conv_layer4) # skip layer
+    deconv2 = tf.layers.conv2d_transpose(deconv1, num_classes, 4, 2, padding='same')
+
+    conv_layer3 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, 1, trainable=False) # 1x1 convolution
+    deconv2 = tf.add(deconv2, conv_layer3) # skip layer
+    deconv_out = tf.layers.conv2d_transpose(deconv2, num_classes, 16, 8, padding='same')
     return deconv_out
 tests.test_layers(layers)
 
@@ -92,8 +97,14 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
     sess.run(tf.global_variables_initializer())
-    images, labels = get_batches_fn(batch_size)
-    loss = sess.run(train_op, feed_dict={input_image: images, correct_label: labels, keep_prob: 0.5, learning_rate: 0.001})
+    for epoch in range(epochs):
+        losses = []
+        print("Training epoch %d" % (epoch+1))
+        for images, labels in get_batches_fn(batch_size):
+            loss, _ = sess.run([cross_entropy_loss, train_op], \
+                feed_dict={input_image: images, correct_label: labels, keep_prob: 0.8, learning_rate: 0.0001})
+            losses.append(loss)
+        print("Loss: %f" % (sum(losses)/len(losses)))
 tests.test_train_nn(train_nn)
 
 
@@ -120,12 +131,25 @@ def run():
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
-        # TODO: Build NN using load_vgg, layers, and optimize function
+        # Initialize parameters
+        epochs = 30
+        batch_size = 1
 
-        # TODO: Train NN using the train_nn function
+        # Initialize placeholders
+        correct_label = tf.placeholder(tf.float32, [None, None, None, num_classes])
+        learning_rate = tf.placeholder(tf.float32)
 
-        # TODO: Save inference data using helper.save_inference_samples
-        #  helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
+        # Build NN using load_vgg, layers, and optimize function
+        input_image, keep_prob, layer3_out, layer4_out, layer7_out = load_vgg(sess, vgg_path)
+        out_layer = layers(layer3_out, layer4_out, layer7_out, num_classes)
+        logits, train_op, cross_entropy_loss = optimize(out_layer, correct_label, learning_rate, num_classes)
+
+        # Train NN using the train_nn function
+        train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, \
+             correct_label, keep_prob, learning_rate)
+
+        # Save inference data using helper.save_inference_samples
+        helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
 
         # OPTIONAL: Apply the trained model to a video
 
